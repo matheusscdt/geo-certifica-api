@@ -1,0 +1,62 @@
+networks:
+  geocertifica-network:
+    name: geocertifica-network
+    driver: bridge
+  kong-net:
+    name: kong-net
+    driver: bridge
+    external: true
+
+volumes:
+  geocertifica-database: {}
+
+services:
+  geocertifica-api:
+    container_name: geocertifica-api
+    image: registry-gitlab.grupoimagetech.com.br/erp/geocertifica-api:dev
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/home/geocertifica-api
+      - ./docker/php/php.ini:/usr/local/etc/php/php.ini
+    networks:
+      - geocertifica-network
+    depends_on:
+      - geocertifica-database
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+  geocertifica-nginx:
+    container_name: geocertifica-nginx
+    image: nginx:latest
+    restart: always
+    tty: true
+    volumes:
+      - .:/home/geocertifica-api
+      - ./docker/nginx:/etc/nginx/conf.d/
+    ports:
+      - ${PORT}:80
+    networks:
+      - geocertifica-network
+      - kong-net
+    depends_on:
+      - geocertifica-api
+
+  geocertifica-database:
+    container_name: geocertifica-database
+    image: postgres:14-alpine
+    restart: unless-stopped
+    tty: true
+    ports:
+      - ${DB_EXTERNAL_PORT}:5432
+    volumes:
+      - geocertifica-database:/var/lib/postgresql/data
+      - ./docker/postgres:/docker-entrypoint-initdb.d
+    environment:
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_DB=${DB_DATABASE}
+    networks:
+      - geocertifica-network
